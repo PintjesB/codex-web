@@ -9,7 +9,27 @@ APP_SHA256="${CODEX_APP_SHA256:-cd29516a850973879115b7b4f2a4bfa32a9a05b7d6d84a63
 APP_ZIP="$TEMP_DIR/file.zip"
 APP_URL="https://persistent.oaistatic.com/codex-app-prod/Codex-darwin-arm64-$APP_VERSION.zip"
 
+verify_sha256() {
+  local expected="$1"
+  local file_path="$2"
+  local actual
+
+  if command -v sha256sum >/dev/null 2>&1; then
+    printf '%s  %s\n' "$expected" "$file_path" | sha256sum --check --status
+    return
+  fi
+
+  if command -v shasum >/dev/null 2>&1; then
+    actual="$(shasum -a 256 "$file_path" | awk '{print $1}')"
+    [[ "$actual" == "$expected" ]]
+    return
+  fi
+
+  echo "No SHA-256 verifier found. Install sha256sum or shasum." >&2
+  return 127
+}
+
 curl --fail --location --proto '=https' --tlsv1.2 -o "$APP_ZIP" "$APP_URL"
-printf '%s  %s\n' "$APP_SHA256" "$APP_ZIP" | sha256sum --check --status
+verify_sha256 "$APP_SHA256" "$APP_ZIP"
 
 HOSTED_CODEX_APP_ZIP="$APP_ZIP" bash ./scripts/prepare_asar

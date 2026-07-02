@@ -1,24 +1,16 @@
 services:
   codex-app-server:
-    image: node:22-bookworm
+    build:
+      context: ../..
+      dockerfile: Dockerfile.codex-app-server
+    image: local/codex-app-server:latest
     container_name: dev-codex-app-server
     restart: unless-stopped
     working_dir: /workspace
-    user: node
-    environment:
-      HOME: /home/node
-      NPM_CONFIG_PREFIX: /home/node/.local
-      PATH: /home/node/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     volumes:
       - ${DEV_WORKSPACE:-/srv/dev/workspace}:/workspace
       - codex-home:/home/node
       - codex-run:/codex-run
-    command: >
-      bash -lc '
-        npm install -g @openai/codex &&
-        rm -f /codex-run/codex-app-server.sock &&
-        exec codex app-server --listen unix:///codex-run/codex-app-server.sock
-      '
 
   codex-web:
     build:

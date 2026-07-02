@@ -1,0 +1,44 @@
+http:
+  routers:
+    codex-web:
+      rule: Host(`codex-dev.example.tld`)
+      entryPoints:
+        - websecure
+      tls: {}
+      middlewares:
+        - authelia@file
+      service: codex-web
+
+    opencode-web:
+      rule: Host(`opencode-dev.example.tld`)
+      entryPoints:
+        - websecure
+      tls: {}
+      middlewares:
+        - authelia@file
+      service: opencode-web
+
+    code-server:
+      rule: Host(`code-dev.example.tld`)
+      entryPoints:
+        - websecure
+      tls: {}
+      middlewares:
+        - authelia@file
+      service: code-server
+
+  services:
+    codex-web:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:8214
+
+    opencode-web:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:4096
+
+    code-server:
+      loadBalancer:
+        servers:
+          - url: http://127.0.0.1:8443

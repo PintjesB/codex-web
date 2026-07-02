@@ -5,7 +5,7 @@ This is the preferred deployment model when the dev server should keep all agent
 It runs:
 
 - `codex-app-server` as a container with Codex CLI installed.
-- `codex-web` as a container built from this repository.
+- `codex-web` as a container built from this repository or pulled from GHCR.
 - `opencode-web` from the official OpenCode image.
 
 No reverse proxy is required. Ports are bound to `127.0.0.1` only.
@@ -76,12 +76,37 @@ OPENAI_API_KEY=replace-if-used
 ANTHROPIC_API_KEY=replace-if-used
 ```
 
-## Build and start
+## Option A: build locally
 
 ```bash
 cd /srv/dev/compose/codex-web
 docker compose build
 docker compose up -d
+```
+
+## Option B: pull published GHCR images
+
+After the `Publish containers` workflow has run on `main`, use the GHCR Compose file:
+
+```bash
+cd /srv/dev/compose/codex-web
+cp /srv/dev/apps/codex-web/deploy/container/compose.ghcr.yml ./compose.yml
+nano .env
+docker compose pull
+docker compose up -d
+```
+
+Use these `.env` values for GHCR pulls:
+
+```env
+GHCR_OWNER=pintjesb
+IMAGE_TAG=latest
+```
+
+If the packages are private, authenticate Docker on the dev server with a GitHub token that has package read access:
+
+```bash
+docker login ghcr.io
 ```
 
 ## Authenticate Codex
@@ -115,7 +140,7 @@ ss -ltnp | grep -E ':(8214|4096)'
 
 Expected bind address: `127.0.0.1`, not `0.0.0.0`.
 
-## Update
+## Update local-build deployment
 
 ```bash
 cd /srv/dev/apps/codex-web
@@ -125,8 +150,24 @@ docker compose build --pull
 docker compose up -d
 ```
 
-## Do we need CI/CD image publishing?
+## Update GHCR deployment
 
-No, not for this local-only deployment.
+```bash
+cd /srv/dev/apps/codex-web
+git pull
+cd /srv/dev/compose/codex-web
+cp /srv/dev/apps/codex-web/deploy/container/compose.ghcr.yml ./compose.yml
+docker compose pull
+docker compose up -d
+```
 
-The dev server can build the images directly from the checked-out repository. A private GHCR image can be added later when the container setup is proven stable, but it is not required for the first deployment.
+## CI/CD image publishing
+
+The `Publish containers` workflow builds both local images on pull requests and publishes them to GHCR on pushes to `main`, version tags, or manual dispatch.
+
+Published images:
+
+```text
+ghcr.io/pintjesb/codex-web:latest
+ghcr.io/pintjesb/codex-app-server:latest
+```

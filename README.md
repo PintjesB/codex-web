@@ -1,140 +1,207 @@
 # codex-web
 
-a browser frontend for codex desktop, running on a machine you control.
+A browser frontend for Codex Desktop, deployed as a local-only Docker stack on a machine you control.
 
 https://github.com/user-attachments/assets/0a33cbd8-741c-412c-9e75-46dfe9324596
 
-## motivation
+## Purpose
 
-the agents were never meant to stay trapped in a terminal window for long.
-codex desktop brought the power of agents to your local computer, where your
-files, credentials, and tools already live.
+`codex-web` brings the Codex Desktop experience to a browser while keeping the backend on your own dev server. The intended deployment for this fork is Docker Compose, bound to localhost only.
 
-codex-web brings codex desktop to the browser while keeping the backend on a
-machine you control (a linux box in the cloud, your home lab, or a desktop / mac
-mini). agents keep running after your laptop closes. you can reconnect from any
-device with a browser.
-
-this project aims to be as thin a wrapper as possible to ensure upstream changes
-to the codex desktop app can be integrated quickly.
-
-## usage
-
-`codex-web` serves the browser client and hosts the desktop-side bridge. by
-default, it listens on `127.0.0.1:8214`.
-
-it will use `codex` from `PATH` if available, or `CODEX_CLI_PATH` if you set
-it.
-
-run it with `npx`:
-
-```bash
-npx --yes github:0xcaff/codex-web
+```text
+Docker Compose
+├── codex-app-server   -> Unix socket in Docker volume
+├── codex-web          -> 127.0.0.1:8214
+└── opencode-web       -> 127.0.0.1:4096
 ```
 
-or with nix:
+No public reverse proxy is required. Access from another machine should use SSH local forwarding or a VPN.
 
-```bash
-nix run github:0xcaff/codex-web
+## Features in this fork
+
+- Dockerized `codex-web` image.
+- Dockerized `codex-app-server` image.
+- Local-only Docker Compose deployment.
+- Optional OpenCode Web sidecar.
+- Optional GHCR image publishing workflow.
+- GHCR pull-based Compose deployment.
+- Workspace root scoping via `CODEX_WEB_WORKSPACE_ROOT`.
+- Upload size limit via `CODEX_WEB_MAX_UPLOAD_BYTES`.
+- Guarded `/@fs/` access.
+- Non-loopback bind protection unless explicitly allowed.
+
+## Repository layout
+
+```text
+.
+├── Dockerfile.codex-app-server
+├── Dockerfile.codex-web
+├── deploy/container
+│   ├── .env.example
+│   ├── README.md
+│   ├── compose.ghcr.yml
+│   └── compose.yml
+└── .github/workflows
+    ├── ci.yml
+    └── publish-containers.yml
 ```
 
-then open <http://127.0.0.1:8214> in a browser.
+## Option A: build locally
 
-### sign in
-
-ensure the codex cli on the host machine is signed in before starting the
-server.
+Create folders on the dev server:
 
 ```bash
-codex login --device-auth
+sudo mkdir -p /srv/dev/apps /srv/dev/workspace /srv/dev/compose/codex-web
+sudo chown -R "$USER:$USER" /srv/dev
 ```
 
-### proxying to app-server (advanced usage)
-
-it’s often useful to run the app server separately, so a crash or restart of
-codex-web doesn’t interrupt the codex process executing commands.
-
-it's possible to hook codex-web up to an already-running app server using the
-`codex_remote_proxy` script.
-
-start a long-lived app server somewhere:
+Clone and configure:
 
 ```bash
-codex app-server --listen unix:///tmp/codex-app-server.sock
+cd /srv/dev/apps
+git clone git@github.com:PintjesB/codex-web.git
+
+cd /srv/dev/compose/codex-web
+cp /srv/dev/apps/codex-web/deploy/container/compose.yml ./compose.yml
+cp /srv/dev/apps/codex-web/deploy/container/.env.example ./.env
+nano .env
 ```
 
-then run `codex-web` with the proxy helper:
+Start:
 
 ```bash
-nix shell github:0xcaff/codex-web github:0xcaff/codex-web#codex_remote_proxy -c bash -lc '
-  export CODEX_UNIX_SOCKET=/tmp/codex-app-server.sock
-  export CODEX_CLI_PATH="$(command -v codex_remote_proxy)"
-  codex-web
-'
+cd /srv/dev/compose/codex-web
+docker compose build
+docker compose up -d
 ```
 
-## security
+## Option B: pull GHCR images
 
-run `codex-web` only on trusted networks. treat anyone who can reach the
-`codex-web` server as someone who can operate codex on the host machine as the
-same user running the server.
+After the `Publish containers` workflow has published images from `main`, use the GHCR Compose file.
 
-if you need authn or authz, implement it outside of `codex-web`: proxy it through
-wireguard, tailscale, or an ssh tunnel and put an authentication gateway or
-reverse proxy in front.
+Published images:
 
-someone with access to the web ui may be able to:
+```text
+ghcr.io/pintjesb/codex-web:latest
+ghcr.io/pintjesb/codex-app-server:latest
+```
 
-- run commands on the host, limited only by the permissions of the `codex-web`
-  server process.
-- read or modify files, environment variables, credentials, ssh keys, and other
-  local resources that are accessible to that process.
-- use the codex / chatgpt account already signed in on the host. this may
-  consume usage quota or billing credits, and may expose account metadata shown
-  by the app or cli, such as name or email address.
+Configure:
 
-## features
+```bash
+cd /srv/dev/apps
+git clone git@github.com:PintjesB/codex-web.git
 
-- hostable on macOS, Linux (and anything codex cli + node will run on)
-- reachable from the browser
-- thin wrapper, so updates should land fast
-- working today:
-  - subagents
-  - inline images
-  - editor sidepanel
-  - transcription
+cd /srv/dev/compose/codex-web
+cp /srv/dev/apps/codex-web/deploy/container/compose.ghcr.yml ./compose.yml
+cp /srv/dev/apps/codex-web/deploy/container/.env.example ./.env
+nano .env
+```
 
-## roadmap
+Set:
 
-some parts of the desktop experience are not wired up yet:
+```env
+GHCR_OWNER=pintjesb
+IMAGE_TAG=latest
+```
 
-- browser panel support, likely rebuilt around iframes
-- computer use on linux, which could become a very powerful feature
-- terminal support
-- git worker integration
-- whatever else people find and file issues for
+Pull and start:
 
-## issues welcome
+```bash
+cd /srv/dev/compose/codex-web
+docker compose pull
+docker compose up -d
+```
 
-if something is broken, missing, or rough around the edges, please file an
-issue.
+If the GHCR packages are private, run `docker login ghcr.io` first.
 
-using `codex-web` in an interesting way? post about it on x and tag me
-[@0xcaff](https://x.com/0xcaff).
+## Authenticate Codex
 
-using this at a company and need something more tailored? email me and we can
-talk.
+Codex authentication is stored in the persistent `codex-home` Docker volume.
 
-## alternatives
+```bash
+cd /srv/dev/compose/codex-web
+docker compose run --rm codex-app-server codex login --device-auth
+docker compose restart codex-app-server codex-web
+```
 
-* [davej/pocodex](https://github.com/davej/pocodex) i used this until the wheels fell off. i needed subagents
-  and an inline image viewer. this didn't have them and was having a hard time
-  keeping up with upstream codex updates.
-* the native codex remote feature (behind a feature flag) is great for
-  connecting to remote codex hosts over ssh to manage long running tasks but
-  this only works if you have codex desktop on your client device. this means it
-  doesn't work on mobile.
-* upcoming first party mobile app from openai. `codex-web` exists and works
-  today. i can't wait for the mobile app but judging by the other openai mobile
-  apps, i'm a little bit skeptical about the quality of the mobile experience.
-  time will tell. 
+## Access
+
+Use SSH local forwarding from your desktop:
+
+```bash
+ssh -N \
+  -L 8214:127.0.0.1:8214 \
+  -L 4096:127.0.0.1:4096 \
+  dev@dev-ai-01
+```
+
+Then open:
+
+```text
+http://127.0.0.1:8214
+http://127.0.0.1:4096
+```
+
+Verify local-only binding on the dev server:
+
+```bash
+ss -ltnp | grep -E ':(8214|4096)'
+```
+
+Expected bind address: `127.0.0.1`, not `0.0.0.0`.
+
+## Update local-build deployment
+
+```bash
+cd /srv/dev/apps/codex-web
+git pull
+
+cd /srv/dev/compose/codex-web
+docker compose build --pull
+docker compose up -d
+```
+
+## Update GHCR deployment
+
+```bash
+cd /srv/dev/apps/codex-web
+git pull
+
+cd /srv/dev/compose/codex-web
+cp /srv/dev/apps/codex-web/deploy/container/compose.ghcr.yml ./compose.yml
+docker compose pull
+docker compose up -d
+```
+
+## CI/CD
+
+| Workflow | Purpose |
+|---|---|
+| `CI` | Installs dependencies without lifecycle scripts, builds the server, and runs advisory dependency audit. |
+| `Publish containers` | Builds images on pull requests and publishes GHCR images on `main`, `v*` tags, or manual dispatch. |
+
+Pull requests build images without pushing. Pushes to `main` publish `latest` and SHA tags.
+
+## Configuration
+
+| Variable | Default | Purpose |
+|---|---:|---|
+| `DEV_WORKSPACE` | `/srv/dev/workspace` | Host workspace mounted into containers as `/workspace`. |
+| `CODEX_WEB_PORT` | `8214` | Localhost port for Codex Web. |
+| `CODEX_WEB_MAX_UPLOAD_BYTES` | `26214400` | Multipart upload size limit. |
+| `CODEX_BUFFER_SIZE` | `104857600` | WebSocket proxy buffer size. |
+| `OPENCODE_WEB_PORT` | `4096` | Localhost port for OpenCode Web. |
+| `OPENCODE_SERVER_PASSWORD` | required | Password for OpenCode Web. |
+| `GHCR_OWNER` | `pintjesb` | GHCR owner used by `compose.ghcr.yml`. |
+| `IMAGE_TAG` | `latest` | GHCR image tag used by `compose.ghcr.yml`. |
+
+## Security model
+
+The web UI provides powerful access to the mounted workspace. Keep the services bound to localhost, access them through SSH forwarding or VPN, and mount only the workspace directories you intend the agents to use.
+
+More details are in:
+
+```text
+deploy/container/README.md
+```

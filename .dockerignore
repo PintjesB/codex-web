@@ -1,0 +1,7 @@
+.git
+.github
+node_modules
+scratch
+npm-debug.log*
+.DS_Store
+deploy/container/.env

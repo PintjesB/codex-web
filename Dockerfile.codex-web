@@ -1,6 +1,7 @@
 FROM node:22-bookworm
 
 ENV NODE_ENV=production
+ENV WEBSOCAT_VERSION=1.14.1
 WORKDIR /app
 
 RUN apt-get update \
@@ -11,8 +12,12 @@ RUN apt-get update \
     openssh-client \
     patch \
     unzip \
-    websocat \
-  && rm -rf /var/lib/apt/lists/*
+  && rm -rf /var/lib/apt/lists/* \
+  && curl --fail --location --proto '=https' --tlsv1.2 \
+    --output /usr/local/bin/websocat \
+    "https://github.com/vi/websocat/releases/download/v${WEBSOCAT_VERSION}/websocat.x86_64-unknown-linux-musl" \
+  && chmod 0755 /usr/local/bin/websocat \
+  && websocat --version
 
 COPY package.json package-lock.json ./
 COPY assets ./assets

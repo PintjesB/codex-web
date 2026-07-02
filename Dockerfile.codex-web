@@ -1,0 +1,38 @@
+FROM node:22-bookworm
+
+ENV NODE_ENV=production
+WORKDIR /app
+
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    git \
+    openssh-client \
+    patch \
+    unzip \
+    websocat \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+COPY assets ./assets
+COPY patches ./patches
+COPY scripts ./scripts
+COPY src ./src
+COPY vite.browser.config.ts tsconfig.json ./
+
+RUN npm ci \
+  && chmod +x /app/scripts/codex_remote_proxy \
+  && npm cache clean --force
+
+USER node
+
+ENV CODEX_WEB_WORKSPACE_ROOT=/workspace
+ENV CODEX_WEB_MAX_UPLOAD_BYTES=26214400
+ENV CODEX_CLI_PATH=/app/scripts/codex_remote_proxy
+ENV CODEX_UNIX_SOCKET=/codex-run/codex-app-server.sock
+ENV CODEX_BUFFER_SIZE=104857600
+
+EXPOSE 8214
+
+CMD ["node", "/app/src/server/main.js", "--host", "0.0.0.0", "--port", "8214"]

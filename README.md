@@ -137,4 +137,4 @@ talk.
 * upcoming first party mobile app from openai. `codex-web` exists and works
   today. i can't wait for the mobile app but judging by the other openai mobile
   apps, i'm a little bit skeptical about the quality of the mobile experience.
-  time will tell.
+  time will tell. 

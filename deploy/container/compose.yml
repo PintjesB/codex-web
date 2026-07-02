@@ -1,0 +1,65 @@
+services:
+  codex-app-server:
+    image: node:22-bookworm
+    container_name: dev-codex-app-server
+    restart: unless-stopped
+    working_dir: /workspace
+    user: node
+    environment:
+      HOME: /home/node
+      NPM_CONFIG_PREFIX: /home/node/.local
+      PATH: /home/node/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    volumes:
+      - ${DEV_WORKSPACE:-/srv/dev/workspace}:/workspace
+      - codex-home:/home/node
+      - codex-run:/codex-run
+    command: >
+      bash -lc '
+        npm install -g @openai/codex &&
+        rm -f /codex-run/codex-app-server.sock &&
+        exec codex app-server --listen unix:///codex-run/codex-app-server.sock
+      '
+
+  codex-web:
+    build:
+      context: ../..
+      dockerfile: Dockerfile.codex-web
+    image: local/codex-web:latest
+    container_name: dev-codex-web
+    restart: unless-stopped
+    depends_on:
+      - codex-app-server
+    environment:
+      CODEX_WEB_WORKSPACE_ROOT: /workspace
+      CODEX_WEB_MAX_UPLOAD_BYTES: ${CODEX_WEB_MAX_UPLOAD_BYTES:-26214400}
+      CODEX_UNIX_SOCKET: /codex-run/codex-app-server.sock
+      CODEX_CLI_PATH: /app/scripts/codex_remote_proxy
+      CODEX_BUFFER_SIZE: ${CODEX_BUFFER_SIZE:-104857600}
+    volumes:
+      - ${DEV_WORKSPACE:-/srv/dev/workspace}:/workspace
+      - codex-run:/codex-run
+    ports:
+      - "127.0.0.1:${CODEX_WEB_PORT:-8214}:8214"
+
+  opencode-web:
+    image: ghcr.io/anomalyco/opencode:latest
+    container_name: dev-opencode-web
+    restart: unless-stopped
+    working_dir: /workspace
+    environment:
+      OPENCODE_SERVER_USERNAME: ${OPENCODE_SERVER_USERNAME:-opencode}
+      OPENCODE_SERVER_PASSWORD: ${OPENCODE_SERVER_PASSWORD:?set OPENCODE_SERVER_PASSWORD in .env}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ${DEV_WORKSPACE:-/srv/dev/workspace}:/workspace
+      - opencode-data:/home/opencode/.local/share/opencode
+    ports:
+      - "127.0.0.1:${OPENCODE_WEB_PORT:-4096}:4096"
+    command: ["opencode", "web", "--hostname", "0.0.0.0", "--port", "4096"]
+
+volumes:
+  codex-home:
+  codex-run:
+  opencode-data:

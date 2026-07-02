@@ -8,7 +8,6 @@
     "src/server/electron/index.js",
     "!**/*.ts"
   ],
-  "bin": "src/server/main.js",
   "scripts": {
     "prepare": "./scripts/prepare && npm run build:browser && npm run build:server",
     "build": "npm run prepare:asar && npm run build:browser && npm run build:server",

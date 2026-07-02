@@ -17,6 +17,9 @@ type ServerOptions = {
   port: number;
 };
 
+const DEFAULT_MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "::1"]);
+
 type RendererToMainMessage =
   | {
       type: "ipc-renderer-invoke";
@@ -122,6 +125,11 @@ function printUsage(): void {
       "  --host 127.0.0.1",
       "  --port 8214",
       "",
+      "Environment:",
+      "  CODEX_WEB_WORKSPACE_ROOT        allowed workspace root for file browsing",
+      "  CODEX_WEB_MAX_UPLOAD_BYTES      max upload size, default 26214400",
+      "  CODEX_WEB_ALLOW_NON_LOOPBACK    set to 1 to allow --host 0.0.0.0",
+      "",
       "Examples:",
       "  yarn server",
       "  yarn server --port 9000",
@@ -184,6 +192,79 @@ function errorMessage(error: unknown): string {
   return String(error);
 }
 
+function envFlag(name: string): boolean {
+  return /^(1|true|yes|on)$/i.test(process.env[name] ?? "");
+}
+
+function parsePositiveIntegerEnv(name: string, fallback: number): number {
+  const raw = process.env[name]?.trim();
+  if (!raw) {
+    return fallback;
+  }
+
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new Error(`${name} must be a positive integer`);
+  }
+
+  return parsed;
+}
+
+function getWorkspaceRoot(): string {
+  return path.resolve(process.env.CODEX_WEB_WORKSPACE_ROOT?.trim() || os.homedir());
+}
+
+function isPathWithinRoot(candidate: string, root: string): boolean {
+  const relativePath = path.relative(root, candidate);
+  return (
+    relativePath === "" ||
+    (!!relativePath &&
+      !relativePath.startsWith("..") &&
+      !path.isAbsolute(relativePath))
+  );
+}
+
+async function getRealAllowedRoot(rootPath: string): Promise<string> {
+  return await fs.realpath(path.resolve(rootPath));
+}
+
+async function assertPathWithinAnyRoot(
+  candidatePath: string,
+  rootPaths: string[],
+): Promise<string> {
+  const [candidateRealPath, ...rootRealPaths] = await Promise.all([
+    fs.realpath(path.resolve(candidatePath)),
+    ...rootPaths.map(getRealAllowedRoot),
+  ]);
+
+  if (!rootRealPaths.some((rootPath) => isPathWithinRoot(candidateRealPath, rootPath))) {
+    throw new Error(`Path is outside allowed roots: ${candidatePath}`);
+  }
+
+  return candidateRealPath;
+}
+
+function assertSafeBindHost(host: string): void {
+  if (LOOPBACK_HOSTS.has(host)) {
+    return;
+  }
+
+  if (envFlag("CODEX_WEB_ALLOW_NON_LOOPBACK")) {
+    return;
+  }
+
+  throw new Error(
+    `Refusing to bind codex-web to non-loopback host "${host}". ` +
+      "Keep codex-web on localhost behind a reverse proxy, or set " +
+      "CODEX_WEB_ALLOW_NON_LOOPBACK=1 explicitly.",
+  );
+}
+
+function getStaticFilePath(rawPath: string): string {
+  const withoutQuery = rawPath.split("?")[0] ?? rawPath;
+  return path.resolve("/", decodeURIComponent(withoutQuery));
+}
+
 async function getWorkspaceDirectoryEntries({
   directoryPath,
   directoriesOnly,
@@ -191,8 +272,9 @@ async function getWorkspaceDirectoryEntries({
   directoryPath: string | null;
   directoriesOnly: boolean;
 }): Promise<WorkspaceDirectoryEntries> {
-  const requestedPath = directoryPath?.trim() || os.homedir();
-  const resolvedPath = path.resolve(requestedPath);
+  const workspaceRoot = getWorkspaceRoot();
+  const requestedPath = directoryPath?.trim() || workspaceRoot;
+  const resolvedPath = await assertPathWithinAnyRoot(requestedPath, [workspaceRoot]);
   const stat = await fs.stat(resolvedPath);
   if (!stat.isDirectory()) {
     throw new Error(`Directory not found: ${requestedPath}`);
@@ -215,9 +297,9 @@ async function getWorkspaceDirectoryEntries({
     })
     .sort(compareWorkspaceDirectoryEntries);
 
-  const rootPath = path.parse(resolvedPath).root;
+  const workspaceRootRealPath = await getRealAllowedRoot(workspaceRoot);
   const parentPath =
-    resolvedPath === rootPath ? null : path.dirname(resolvedPath);
+    resolvedPath === workspaceRootRealPath ? null : path.dirname(resolvedPath);
 
   return {
     directoryPath: resolvedPath,
@@ -251,14 +333,21 @@ function ensureElectronLikeProcessContext(): void {
 }
 
 async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
+  assertSafeBindHost(options.host);
+
   const bridgeState = getIpcMainBridgeState();
   const app = Fastify({ logger: false });
   const websocketServer = new WebSocketServer({ noServer: true });
   const sockets = new Set<WebSocket>();
 
+  const workspaceRoot = getWorkspaceRoot();
+
   await app.register(fastifyMultipart, {
     limits: {
-      fileSize: Infinity,
+      fileSize: parsePositiveIntegerEnv(
+        "CODEX_WEB_MAX_UPLOAD_BYTES",
+        DEFAULT_MAX_UPLOAD_BYTES,
+      ),
     },
   });
 
@@ -292,10 +381,23 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
     return reply.send({ files });
   });
 
-  await app.register(fastifyStatic, {
-    root: "/",
-    prefix: "/@fs/",
-    decorateReply: false,
+  app.get("/@fs/*", async (request, reply) => {
+    try {
+      const params = request.params as { "*"?: string };
+      const requestedPath = getStaticFilePath(params["*"] ?? "");
+      const allowedPath = await assertPathWithinAnyRoot(requestedPath, [
+        workspaceRoot,
+        uploadRoot,
+      ]);
+      const stat = await fs.stat(allowedPath);
+      if (!stat.isFile()) {
+        return reply.code(404).send({ error: "Not Found" });
+      }
+
+      return reply.send(await fs.readFile(allowedPath));
+    } catch {
+      return reply.code(404).send({ error: "Not Found" });
+    }
   });
 
   await app.register(fastifyStatic, {

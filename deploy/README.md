@@ -125,9 +125,10 @@ cd /srv/dev/apps
 git clone git@github.com:PintjesB/codex-web.git
 cd /srv/dev/apps/codex-web
 npm ci
-npm run build
 chmod +x /srv/dev/apps/codex-web/scripts/codex_remote_proxy
 ```
+
+`npm ci` intentionally runs the repository `prepare` lifecycle. That step downloads and verifies the hosted Codex app ZIP, patches the webview assets, and builds the browser/server output. Do not use `npm ci --ignore-scripts` for a normal deployment build.
 
 ## 5. Create env files
 
@@ -181,7 +182,7 @@ curl -I http://127.0.0.1:8214
 curl -I http://127.0.0.1:4096
 ```
 
-After the runtime hardening PR is merged, verify host file escape is blocked:
+Verify host file escape is blocked:
 
 ```bash
 curl -i http://127.0.0.1:8214/@fs/etc/passwd
@@ -232,11 +233,10 @@ sudo -iu dev
 cd /srv/dev/apps/codex-web
 git pull
 npm ci
-npm run build
 systemctl --user restart codex-web.service
 ```
 
-Restart backends:
+Restart all backends if Codex, OpenCode, or service files changed:
 
 ```bash
 systemctl --user restart codex-app-server.service

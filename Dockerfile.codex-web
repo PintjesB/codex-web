@@ -19,7 +19,7 @@ COPY assets ./assets
 COPY patches ./patches
 COPY scripts ./scripts
 COPY src ./src
-COPY vite.browser.config.ts tsconfig.json ./
+COPY vite.browser.config.ts ./
 
 RUN npm ci \
   && chmod +x /app/scripts/codex_remote_proxy \

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -394,7 +395,8 @@ async function startIpcBridgeServer(options: ServerOptions): Promise<void> {
         return reply.code(404).send({ error: "Not Found" });
       }
 
-      return reply.send(await fs.readFile(allowedPath));
+      reply.header("Content-Length", stat.size);
+      return reply.send(createReadStream(allowedPath));
     } catch {
       return reply.code(404).send({ error: "Not Found" });
     }

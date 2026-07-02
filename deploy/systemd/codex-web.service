@@ -1,0 +1,17 @@
+[Unit]
+Description=Codex Web
+After=network-online.target codex-app-server.service
+Wants=network-online.target
+Requires=codex-app-server.service
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/dev/apps/codex-web
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/srv/dev/secrets/codex-web.env
+ExecStart=/usr/bin/env bash -lc 'export CODEX_UNIX_SOCKET="$XDG_RUNTIME_DIR/codex-app-server.sock"; export CODEX_CLI_PATH=/srv/dev/apps/codex-web/scripts/codex_remote_proxy; exec node /srv/dev/apps/codex-web/src/server/main.js --host 127.0.0.1 --port 8214'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

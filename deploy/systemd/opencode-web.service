@@ -1,0 +1,16 @@
+[Unit]
+Description=OpenCode Web
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/dev/workspace
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=/srv/dev/secrets/opencode.env
+ExecStart=/usr/bin/env bash -lc 'exec opencode web --hostname 127.0.0.1 --port 4096'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

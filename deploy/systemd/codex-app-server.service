@@ -1,0 +1,15 @@
+[Unit]
+Description=Codex App Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/srv/dev/workspace
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/bin/env bash -lc 'exec codex app-server --listen unix://$XDG_RUNTIME_DIR/codex-app-server.sock'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=default.target

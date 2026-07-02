@@ -1,0 +1,17 @@
+services:
+  code-server:
+    image: lscr.io/linuxserver/code-server:latest
+    container_name: dev-code-server
+    restart: unless-stopped
+    environment:
+      PUID: "1001"
+      PGID: "1001"
+      TZ: Europe/Brussels
+      PASSWORD: "replace-with-a-long-random-password"
+      DEFAULT_WORKSPACE: /workspace
+    volumes:
+      - /srv/dev/workspace:/workspace
+      - /srv/dev/code-server/config:/config
+      - /srv/dev/apps:/apps:ro
+    ports:
+      - "127.0.0.1:8443:8443"

@@ -1,0 +1,13 @@
+FROM node:22-bookworm
+
+ENV NODE_ENV=production
+ENV NPM_CONFIG_PREFIX=/home/node/.local
+ENV PATH=/home/node/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+RUN npm install -g @openai/codex \
+  && npm cache clean --force
+
+USER node
+WORKDIR /workspace
+
+CMD ["bash", "-lc", "rm -f /codex-run/codex-app-server.sock && exec codex app-server --listen unix:///codex-run/codex-app-server.sock"]

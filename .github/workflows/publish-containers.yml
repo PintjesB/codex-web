@@ -35,6 +35,7 @@ permissions:
 
 env:
   REGISTRY: ghcr.io
+  DOCKER_BUILD_RECORD_UPLOAD: "false"
 
 jobs:
   publish:
